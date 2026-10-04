@@ -21,7 +21,7 @@ jobs:
 
     - name: Start Bot
       env:
-        SERVER_IP: ${{ secrets.Kiingdom_SmP.aternos.me }}
+        SERVER_IP: ${{ secrets.cusk.aternos.host }}
         SERVER_PORT: ${{ secrets.36463 }}
         BOT_NAME: ${{ secrets.GUARDIAN }}
       run: node index.js
