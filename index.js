@@ -1,98 +1,101 @@
 const mineflayer = require('mineflayer');
+const { Movements, pathfinder, goals } = require('mineflayer-pathfinder');
+const { GoalBlock } = goals;
+const config = require('./settings.json');
+const express = require('express');
+const http = require('http');
 
-function createBot() {
-    const bot = mineflayer.createBot({
-        host: process.env.SERVER_IP,
-        port: parseInt(process.env.SERVER_PORT),
-        username: process.env.BOT_NAME || 'AfnanBot',
-        version: false
-    });
+// ============================================================
+// EXPRESS SERVER - Keep Render/Aternos alive
+// ============================================================
+const app = express();
+const PORT = process.env.PORT || 5000;
 
-    bot.on('spawn', () => {
-        console.log('🤖 Bot game me aa gaya hai aur pro player wali harkatein shuru kar raha hai!');
-        startHumanizedBehavior(bot);
-    });
+// Bot state tracking
+let botState = {
+  connected: false,
+  lastActivity: Date.now(),
+  reconnectAttempts: 0,
+  startTime: Date.now(),
+  errors: []
+};
 
-    bot.on('end', (reason) => {
-        console.log(`❌ Bot disconnect ho gaya: ${reason}. 30 seconds mein reconnect ho raha hai...`);
-        setTimeout(createBot, 30000);
-    });
-
-    bot.on('error', (err) => {
-        console.log('⚠️ Error aaya:', err);
-    });
-}
-
-function startHumanizedBehavior(bot) {
-    function loop() {
-        if (!bot.entity) {
-            setTimeout(loop, 5000);
-            return;
-        }
-
-        // Ab isme walking, hitting, digging aur looking sab mix kar diya hai
-        const actions = ['walk', 'hit', 'dig', 'look'];
-        const chosenAction = actions[Math.floor(Math.random() * actions.length)];
-
-        if (chosenAction === 'walk') {
-            const directions = ['forward', 'back', 'left', 'right'];
-            const chosenDir = directions[Math.floor(Math.random() * directions.length)];
-            const walkDuration = Math.random() * 4000 + 2000; // 2 se 6 seconds chalna
-
-            console.log(`🚶 Bot ${chosenDir} ki taraf chal raha hai...`);
-            bot.setControlState(chosenDir, true);
-
-            setTimeout(() => {
-                bot.setControlState(chosenDir, false);
-                setTimeout(loop, Math.random() * 6000 + 2000); // Rukne ka time
-            }, walkDuration);
-
-        } 
-        else if (chosenAction === 'hit') {
-            // Hawa me ya samne random punch marna (Swing arm)
-            console.log('👊 Bot ne hawa me punch/hit kiya.');
-            bot.swingArm('right');
-            setTimeout(loop, Math.random() * 4000 + 2000);
-        } 
-        else if (chosenAction === 'dig') {
-            // Bot ke aas-paas ya neeche ka block todne ki koshish karega
-            try {
-                const targetBlock = bot.blockAt(bot.entity.position.offset(1, 0, 0)) || 
-                                    bot.blockAt(bot.entity.position.offset(0, -1, 0));
-                
-                if (targetBlock && targetBlock.name !== 'air' && targetBlock.name !== 'bedrock') {
-                    console.log(`⛏️ Bot ${targetBlock.name} block todne ki koshish kar raha hai...`);
-                    bot.lookAt(targetBlock.position.offset(0.5, 0.5, 0.5), true, () => {
-                        bot.dig(targetBlock, (err) => {
-                            if (err) {
-                                // Agar block protected hai ya nahi toot sakta toh chupchap aage badh jayega
-                                console.log('⚠️ Block nahi tod paya (Protected area).');
-                            } else {
-                                console.log('✅ Block successfully tod diya!');
-                            }
-                            setTimeout(loop, 3000);
-                        });
-                    });
-                } else {
-                    // Agar wahan block nahi mila toh normal punch marke aage badhega
-                    bot.swingArm('right');
-                    setTimeout(loop, 2000);
-                }
-            } catch (e) {
-                setTimeout(loop, 3000);
-            }
-        } 
-        else {
-            // Idhar-udhar head ghumana
-            const yaw = bot.entity.yaw + (Math.random() - 0.5) * 2;
-            const pitch = (Math.random() - 0.5) * 1;
-            bot.look(yaw, pitch, true);
-            console.log('👀 Bot ne idhar-udhar dekha.');
-            setTimeout(loop, Math.random() * 4000 + 2000);
-        }
-    }
-
-    setTimeout(loop, 4000);
-}
-
-createBot();
+// Health check endpoint for monitoring
+// Health check endpoint for monitoring
+app.get('/', (req, res) => {
+  // "Blue Teal Shadow" Theme - Live Dashboard
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>${config.name} Status</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #0f172a; 
+            color: #f8fafc; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden;
+          }
+          .container {
+            background: #1e293b;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(45, 212, 191, 0.2);
+            text-align: center;
+            width: 400px;
+            border: 1px solid #334155;
+            transition: box-shadow 0.3s ease;
+          }
+          h1 { margin-bottom: 30px; font-size: 24px; color: #ccfbf1; display: flex; align-items: center; justify-content: center; gap: 10px; }
+          .stat-card {
+            background: #0f172a;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 12px;
+            border-left: 5px solid #2dd4bf;
+            text-align: left;
+            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+          }
+          .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+          .value { font-size: 18px; font-weight: bold; color: #2dd4bf; text-shadow: 0 0 10px rgba(45, 212, 191, 0.5); margin-top: 5px; }
+          .status-dot { 
+            height: 12px; width: 12px; 
+            border-radius: 50%; 
+            display: inline-block; 
+            margin-right: 8px;
+            box-shadow: 0 0 10px currentColor;
+            transition: color 0.3s ease, box-shadow 0.3s ease;
+            background-color: currentColor; /* Use CSS for the dot color */
+          }
+          /* Override specific IDs to set background color for the dot */
+          #live-indicator { background-color: currentColor; }
+          
+          .pulse { animation: pulse 2s infinite; }
+          @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+          .btn-guide {
+            display: inline-block; margin-top: 20px; padding: 12px 24px; 
+            background: #2dd4bf; color: #0f172a; text-decoration: none; 
+            border-radius: 8px; font-weight: bold; 
+            box-shadow: 0 0 15px rgba(45, 212, 191, 0.4);
+            transition: transform 0.2s;
+          }
+          .btn-guide:hover { transform: translateY(-2px); }
+          .connection-bar {
+            height: 4px; background: #334155; width: 100%; margin-top: 20px; border-radius: 2px; overflow: hidden;
+          }
+          .connection-fill {
+            height: 100%; width: 100%; background: #2dd4bf;
+            animation: loading 2s infinite linear;
+... (800 lines left)
