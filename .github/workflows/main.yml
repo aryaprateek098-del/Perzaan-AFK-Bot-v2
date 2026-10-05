@@ -1,27 +1,27 @@
 name: Aternos AFK Bot
 
 on:
-  workflow_dispatch: # Isse GitHub ke Actions tab me 'Run workflow' ka button aa jayega
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-    - name: Install Dependencies
-      run: npm install
+      - name: Install Dependencies
+        run: npm install
 
-    - name: Start Bot
-      env:
-        SERVER_IP: ${{ secrets.cusk.aternos.host }}
-        SERVER_PORT: ${{ secrets.36463 }}
-        BOT_NAME: ${{ secrets.GUARDIAN }}
-      run: node index.js
+      - name: Start Bot
+        env:
+          SERVER_IP: Kiingdom_SmP.aternos.me
+          SERVER_PORT: "36463"
+          BOT_NAME: ${{ secrets.GUARDIAN }}
+        run: node index.js
